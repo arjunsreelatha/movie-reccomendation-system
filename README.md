@@ -75,7 +75,8 @@ recommendation-system/
 ├── recommender.py                # top-level orchestrator (HybridRecommender)
 ├── evaluate.py                   # 8-model comparison: baselines vs. hybrid vs. hybrid+diversity
 ├── app.py                        # FastAPI backend, models trained once at startup
-├── streamlit_demo.py             # interactive dashboard
+├── Dockerfile                    # container image for the FastAPI service
+├── docker-compose.yml            # local deployment and persistent model cache
 ├── data/
 │   ├── movies.csv
 │   └── ratings.csv
@@ -101,6 +102,41 @@ recommendation-system/
 
 ## How to run
 
+### Run the API with Docker Compose
+
+```bash
+docker compose up --build
+```
+
+The API is available at `http://localhost:8000` and interactive API docs
+at `http://localhost:8000/docs`. The first startup trains the recommender
+and may download the sentence-transformer model; a Docker volume caches
+the downloaded model between runs. If the model hub is unavailable, the
+semantic model uses its TF-IDF/SVD fallback.
+
+Stop the service with:
+
+```bash
+docker compose down
+```
+
+### Deploy publicly with Render
+
+1. Push this project to a GitHub repository.
+2. In Render, choose **New → Blueprint**, connect the repository, and deploy
+   the detected `render.yaml` configuration.
+3. Wait for the first model download and training to finish. Render's health
+   check uses `/health`; the persistent disk keeps the downloaded model cache
+   between deployments.
+4. Open the public service URL or append `/docs` to try the API.
+
+The blueprint uses a paid `standard` instance because the recommender loads
+PyTorch and trains at startup. Check Render's current pricing before deploying.
+The deployment exposes the REST API and its interactive docs, not a separate
+recommendation website.
+
+### Run locally without Docker
+
 ```bash
 pip install -r requirements.txt
 
@@ -113,9 +149,6 @@ python evaluate.py
 # 3. Run the REST API (trains once at startup)
 uvicorn app:app --reload --port 8000
 # then open http://localhost:8000/docs
-
-# 4. Run the interactive demo
-streamlit run streamlit_demo.py
 ```
 
 ## Verified working (this build)
@@ -130,7 +163,6 @@ All of the following were actually executed, not just written:
 - The FastAPI server was started and every endpoint
   (`/health`, `/recommend/{id}`, `/similar/{id}`, `/explain/{user}/{movie}`)
   was hit and returned valid responses.
-- Streamlit boots without error.
 - NeuralCF was saved to `models/neural_cf.pt` and successfully reloaded
   with matching predictions — persistence works.
 

@@ -4,9 +4,9 @@ Top-level orchestrator: wires together content, semantic, collaborative,
 and neural models through candidate generation -> hybrid ranking ->
 diversity re-ranking -> explanation, per the target architecture.
 
-Kept at the project root (rather than nested in src/) so `app.py` and
-`streamlit_demo.py` have one obvious entry point, matching the original
-project's layout for backward compatibility.
+Kept at the project root (rather than nested in src/) so `app.py` has
+one obvious entry point, matching the original project's layout for
+backward compatibility.
 """
 import numpy as np
 

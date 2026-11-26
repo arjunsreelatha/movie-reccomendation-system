@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: recommendation-api
+    runtime: docker
+    plan: standard
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: HF_HOME
+        value: /home/app/.cache/huggingface
+    disk:
+      name: huggingface-cache
+      mountPath: /home/app/.cache/huggingface
+      sizeGB: 2
