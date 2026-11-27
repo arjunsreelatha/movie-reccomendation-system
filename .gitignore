@@ -36,3 +36,6 @@ Thumbs.db
 # Downloaded model and tool caches
 .cache/
 .huggingface/
+
+# Downloaded MovieLens data
+data/movielens-1m/

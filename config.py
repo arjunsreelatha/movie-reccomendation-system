@@ -4,14 +4,15 @@ Single source of truth for hyperparameters, weights, and paths.
 No magic numbers should live inside model/ranking code.
 """
 from dataclasses import dataclass, field
+import os
 from typing import Dict
 
 RANDOM_SEED = 42
 
 DATA_DIR = "data"
 MODELS_DIR = "models"
-MOVIES_PATH = f"{DATA_DIR}/movies.csv"
-RATINGS_PATH = f"{DATA_DIR}/ratings.csv"
+MOVIES_PATH = os.environ.get("MOVIES_PATH", f"{DATA_DIR}/movies.csv")
+RATINGS_PATH = os.environ.get("RATINGS_PATH", f"{DATA_DIR}/ratings.csv")
 
 
 @dataclass
@@ -56,7 +57,21 @@ class HybridConfig:
         "content": 0.45, "semantic": 0.45, "collaborative": 0.05, "neural": 0.05
     })
     cold_start_threshold: int = 5   # ratings count below which a user is "cold"
-    strategy: str = "normalized"    # "weighted" | "normalized" | "learned"
+    strategy: str = field(
+        default_factory=lambda: os.environ.get("HYBRID_STRATEGY", "normalized")
+    )  # "weighted" | "normalized" | "learned" | "xgboost"
+
+
+@dataclass
+class XGBoostRankerConfig:
+    n_estimators: int = 250
+    max_depth: int = 6
+    learning_rate: float = 0.05
+    subsample: float = 0.8
+    colsample_bytree: float = 0.8
+    reg_lambda: float = 1.0
+    val_fraction: float = 0.15
+    n_jobs: int = -1
 
 
 @dataclass
@@ -76,5 +91,6 @@ SEMANTIC = SemanticConfig()
 COLLABORATIVE = CollaborativeConfig()
 NEURAL_CF = NeuralCFConfig()
 HYBRID = HybridConfig()
+XGBOOST_RANKER = XGBoostRankerConfig()
 CANDIDATE_GEN = CandidateGenConfig()
 DIVERSITY = DiversityConfig()

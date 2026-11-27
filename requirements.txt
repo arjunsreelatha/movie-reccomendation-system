@@ -2,6 +2,7 @@ numpy
 pandas
 scipy
 scikit-learn
+xgboost
 torch
 sentence-transformers
 fastapi

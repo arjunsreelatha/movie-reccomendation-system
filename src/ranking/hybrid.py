@@ -96,3 +96,58 @@ class LearnedRanker:
             # fallback: uniform score so callers can still rank (degrades to input order)
             return np.full(len(X), 0.5)
         return self.model.predict_proba(X)[:, 1]
+
+
+class XGBoostRanker:
+    """Gradient-boosted binary relevance ranker over component scores."""
+
+    def __init__(self, feature_names, n_estimators=250, max_depth=6,
+                 learning_rate=0.05, subsample=0.8, colsample_bytree=0.8,
+                 reg_lambda=1.0, val_fraction=0.15, n_jobs=-1, seed=42):
+        from xgboost import XGBClassifier
+
+        self.feature_names = feature_names
+        self.val_fraction = val_fraction
+        self.seed = seed
+        self.model = XGBClassifier(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            learning_rate=learning_rate,
+            subsample=subsample,
+            colsample_bytree=colsample_bytree,
+            reg_lambda=reg_lambda,
+            objective="binary:logistic",
+            eval_metric="logloss",
+            tree_method="hist",
+            random_state=seed,
+            n_jobs=n_jobs,
+        )
+        self.fitted = False
+
+    def fit(self, X: np.ndarray, y: np.ndarray):
+        if len(np.unique(y)) < 2:
+            return self
+
+        rng = np.random.default_rng(self.seed)
+        idx = rng.permutation(len(X))
+        n_val = int(len(X) * self.val_fraction)
+        val_idx, train_idx = idx[:n_val], idx[n_val:]
+
+        if len(np.unique(y[train_idx])) < 2:
+            return self
+
+        self.model.fit(X[train_idx], y[train_idx])
+        self.fitted = True
+
+        if n_val > 0 and len(np.unique(y[val_idx])) > 1:
+            from sklearn.metrics import roc_auc_score
+            val_probs = self.model.predict_proba(X[val_idx])[:, 1]
+            self.val_auc = roc_auc_score(y[val_idx], val_probs)
+        else:
+            self.val_auc = None
+        return self
+
+    def score(self, X: np.ndarray) -> np.ndarray:
+        if not self.fitted:
+            return np.full(len(X), 0.5)
+        return self.model.predict_proba(X)[:, 1]

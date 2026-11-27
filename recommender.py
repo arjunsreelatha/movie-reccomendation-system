@@ -17,7 +17,9 @@ from src.models.collaborative import CollaborativeModel
 from src.models.neural_cf import NeuralCFModel
 from src.models.popularity import PopularityRecommender
 from src.ranking.candidate_gen import generate_candidates
-from src.ranking.hybrid import weighted_fusion, normalized_fusion, LearnedRanker
+from src.ranking.hybrid import (
+    weighted_fusion, normalized_fusion, LearnedRanker, XGBoostRanker,
+)
 from src.ranking.diversity import mmr_rerank
 from src.explainability.explain import explain_recommendation
 
@@ -48,7 +50,7 @@ class HybridRecommender:
             "popularity": self.popularity,
         }
 
-        if self.strategy == "learned":
+        if self.strategy in ("learned", "xgboost"):
             self._fit_learned_ranker()
         return self
 
@@ -62,20 +64,27 @@ class HybridRecommender:
         """
         feature_names = ["content", "semantic", "collaborative", "neural", "popularity"]
         X, y = [], []
-        for user_id, group in self.ratings_df.groupby("userId"):
+        for user_id, group in self.ratings_df.groupby("userId", sort=False):
             item_ids = group.movieId.tolist()
-            c_scores, _ = self.content.score_all(self.ratings_df, user_id, item_ids)
-            s_scores, _ = self.semantic.score_all(self.ratings_df, user_id, item_ids)
+            c_scores, _ = self.content.score_all(group, user_id, item_ids)
+            s_scores, _ = self.semantic.score_all(group, user_id, item_ids)
             cf_scores, _ = self.collaborative.score_all(user_id, item_ids)
             n_scores, _ = self.neural.score_all(user_id, item_ids)
             pop_scores = self.popularity.score_all(item_ids)
-            for _, row in group.iterrows():
-                m = row.movieId
-                X.append([c_scores.get(m, 0), s_scores.get(m, 0), cf_scores.get(m, 0),
-                          n_scores.get(m, 0), pop_scores.get(m, 0)])
-                y.append(1 if row.rating >= 3.5 else 0)
+            X.extend([
+                [c_scores.get(m, 0), s_scores.get(m, 0), cf_scores.get(m, 0),
+                 n_scores.get(m, 0), pop_scores.get(m, 0)]
+                for m in item_ids
+            ])
+            y.extend((group.rating >= 3.5).astype(int).tolist())
 
-        self.learned_ranker = LearnedRanker(feature_names)
+        if self.strategy == "xgboost":
+            self.learned_ranker = XGBoostRanker(
+                feature_names, **vars(config.XGBOOST_RANKER),
+                seed=config.RANDOM_SEED,
+            )
+        else:
+            self.learned_ranker = LearnedRanker(feature_names)
         self.learned_ranker.fit(np.array(X), np.array(y))
 
     # ---------------- Inference ----------------
@@ -107,7 +116,11 @@ class HybridRecommender:
 
         if self.strategy == "weighted":
             fused = weighted_fusion(restricted, weights)
-        elif self.strategy == "learned" and self.learned_ranker is not None and self.learned_ranker.fitted:
+        elif (
+            self.strategy in ("learned", "xgboost")
+            and self.learned_ranker is not None
+            and self.learned_ranker.fitted
+        ):
             feature_names = ["content", "semantic", "collaborative", "neural", "popularity"]
             X = np.array([[restricted[f][m] for f in feature_names] for m in candidates])
             probs = self.learned_ranker.score(X)

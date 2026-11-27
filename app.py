@@ -51,7 +51,9 @@ class RecommendRequest(BaseModel):
     userId: int
     top_k: int = Field(default=10, ge=1, le=50)
     apply_diversity: Optional[bool] = None
-    strategy: Optional[str] = Field(default=None, description="weighted | normalized | learned")
+    strategy: Optional[str] = Field(
+        default=None, description="weighted | normalized | learned | xgboost"
+    )
 
 
 class SimilarMovie(BaseModel):

@@ -172,8 +172,8 @@ def main():
     ncf_rmse, ncf_mae = eval_rating_prediction(ncf.predict, test)
 
     # ---- Hybrid variants ----
-    print("Evaluating Hybrid (normalized fusion)...")
-    hybrid = HybridRecommender(strategy="normalized").fit(train, movies)
+    print(f"Evaluating Hybrid ({config.HYBRID.strategy} strategy)...")
+    hybrid = HybridRecommender(strategy=config.HYBRID.strategy).fit(train, movies)
     results["Hybrid"] = eval_ranked_list(
         lambda u: [r["movieId"] for r in hybrid.recommend(u, top_k=K, apply_diversity=False)],
         test, movies)
@@ -200,9 +200,11 @@ def main():
         row = f"{name:<20}" + "".join(f"{v:<16.4f}" for v in m.values())
         print(row)
 
-    print("\nNote: this synthetic dataset is small (~11K interactions, 300 users), so absolute")
-    print("metric values are modest — the comparison BETWEEN models (hybrid vs. baselines,")
-    print("with vs. without diversity) is what demonstrates methodology, not the raw numbers.")
+    print(
+        f"\nDataset: {len(ratings):,} ratings across "
+        f"{ratings.userId.nunique():,} users and {len(movies):,} movies."
+    )
+    print(f"Hybrid strategy: {hybrid.strategy}.")
 
 
 if __name__ == "__main__":

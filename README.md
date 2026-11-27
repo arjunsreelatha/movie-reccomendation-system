@@ -72,8 +72,9 @@ recommendation-system/
 ├── requirements.txt
 ├── config.py                    # all hyperparameters/weights, single source of truth
 ├── generate_data.py             # synthetic dataset generator (offline, reproducible)
+├── download_movielens.py        # download and convert the official MovieLens 1M dataset
 ├── recommender.py                # top-level orchestrator (HybridRecommender)
-├── evaluate.py                   # 8-model comparison: baselines vs. hybrid vs. hybrid+diversity
+├── evaluate.py                   # model comparison; hybrid strategy is configurable
 ├── app.py                        # FastAPI backend, models trained once at startup
 ├── Dockerfile                    # container image for the FastAPI service
 ├── docker-compose.yml            # local deployment and persistent model cache
@@ -93,7 +94,7 @@ recommendation-system/
     │   └── random_baseline.py    # random baseline
     ├── ranking/
     │   ├── candidate_gen.py      # Stage 1: per-model top-K retrieval
-    │   ├── hybrid.py             # Stage 2: weighted / normalized / learned-ranker fusion
+    │   ├── hybrid.py             # Stage 2: weighted / normalized / logistic / XGBoost fusion
     │   └── diversity.py          # MMR re-ranking
     ├── evaluation/metrics.py     # full offline metric suite
     ├── explainability/explain.py # signal-grounded explanations
@@ -143,7 +144,7 @@ pip install -r requirements.txt
 # 1. Generate the dataset (already generated, but re-runnable / reproducible via seed)
 python generate_data.py
 
-# 2. Run the full 8-model evaluation comparison
+# 2. Run the full model evaluation comparison
 python evaluate.py
 
 # 3. Run the REST API (trains once at startup)
@@ -168,7 +169,7 @@ All of the following were actually executed, not just written:
 
 ## Honest evaluation notes
 
-- The dataset is synthetic (~11K ratings, 300 users, 500 movies), so
+- The default dataset is synthetic (~11K ratings, 300 users, 500 movies), so
   **absolute metric values are modest** (Precision@10 in the 0.01 range).
   This is expected at this scale and is *not* a bug — what demonstrates
   methodology is the **relative comparison**: collaborative filtering
@@ -185,24 +186,40 @@ All of the following were actually executed, not just written:
   search) is a reasonable next step if the catalog grows to real-world
   scale (10K+ items) — noted as a known limitation, not silently glossed
   over.
-- The "learned ranker" is intentionally a simple logistic regression
-  over 5 features — this is accurately labeled as a real (if simple)
-  learned model, not oversold as a more sophisticated architecture. It
-  is only used when `config.HYBRID.strategy = "learned"`.
+- The logistic-regression learned ranker remains available for the
+  smaller synthetic dataset. XGBoost can be selected for larger datasets
+  and is trained/evaluated against the same held-out split.
 
 ## Swapping in a real dataset
 
-Replace `data/movies.csv` / `data/ratings.csv` with the same schema
-(`movieId,title,genres[,tags,overview]` and `userId,movieId,rating,timestamp`) —
-e.g. MovieLens 25M — with no code changes required. The system does not
-auto-download any external dataset.
+The project includes an opt-in downloader for the official MovieLens 1M
+dataset. It preserves the synthetic files and writes the converted dataset
+to the Git-ignored `data/movielens-1m/` directory:
+
+```bash
+python download_movielens.py
+```
+
+The archive is about 6 MB; the converted ratings CSV is about 25 MB.
+To run evaluation or the API using this dataset with XGBoost, select the
+data files and ranker through environment variables:
+
+```powershell
+$env:MOVIES_PATH = "data/movielens-1m/movies.csv"
+$env:RATINGS_PATH = "data/movielens-1m/ratings.csv"
+$env:HYBRID_STRATEGY = "xgboost"
+python evaluate.py
+# Or: uvicorn app:app --reload --port 8000
+```
+
+The dataset has the existing `movieId,title,genres,tags,overview` and
+`userId,movieId,rating,timestamp` schemas; tags and overview are empty
+because MovieLens 1M does not include those fields.
 
 ## Possible further extensions
 
 - Approximate nearest-neighbor retrieval (FAISS) for candidate
   generation at real-world catalog scale
-- Replace the logistic-regression learned ranker with LightGBM/XGBoost
-  once there's enough training data to justify it
 - Add implicit feedback (clicks/watch-time) as a second signal alongside
   explicit ratings, modeled separately rather than conflated with them
 - A/B testing framework to tune hybrid weights against live engagement
